@@ -18,6 +18,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Usuários / Perfis
     Route::get('/users/search', [UserController::class, 'search']);
+    Route::get('/users/suggestions', [UserController::class, 'suggestions']);
     Route::get('/users/{username}', [UserController::class, 'show']);
     Route::get('/users/{username}/posts', [PostController::class, 'byUsername']);
     Route::put('/profile', [UserController::class, 'update']);

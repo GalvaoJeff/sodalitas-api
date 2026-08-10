@@ -6,6 +6,7 @@ use App\Models\Post;
 use App\Models\User;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class PostService
@@ -70,7 +71,7 @@ class PostService
 
             $post->media()->create([
                 'type' => $isVideo ? 'video' : 'image',
-                'url' => '/storage/'.$path,
+                'url' => asset('storage/'.$path),
                 'position' => $position,
             ]);
         }
@@ -93,14 +94,30 @@ class PostService
         }
 
         foreach ($post->media as $media) {
-            if (str_starts_with($media->url, '/storage/')) {
-                Storage::disk('public')->delete(
-                    str_replace('/storage/', '', $media->url)
-                );
+            if (str_contains($media->url, '/storage/')) {
+                $relativePath = Str::after($media->url, '/storage/');
+                Storage::disk('public')->delete($relativePath);
             }
         }
 
         $post->delete();
+    }
+
+    /**
+     * Carrega um post completo (autor, mídia, comentários) já com
+     * liked_by_me calculado para o usuário autenticado, se houver.
+     */
+    public function findForViewer(Post $post, ?User $user): Post
+    {
+        $post->load(['user', 'media', 'comments.user'])
+            ->loadCount(['comments', 'likes']);
+
+        if ($user) {
+            $liked = $post->likes()->where('user_id', $user->id)->exists();
+            $post->setAttribute('liked_by_me', $liked);
+        }
+
+        return $post;
     }
 
     /**

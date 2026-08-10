@@ -35,16 +35,39 @@ class UserService
     }
 
     /**
-     * Busca usuários por nome ou username (para a tela de pesquisa).
-     *
-     * @return \Illuminate\Database\Eloquent\Collection<int, User>
+     * Lista/busca usuários por nome ou username (tela de pesquisa).
+     * Sem termo de busca, retorna todos os usuários paginados.
+     * O próprio usuário autenticado é sempre excluído dos resultados,
+     * já que "seguir a si mesmo" não é uma ação válida.
      */
-    public function search(string $query, int $limit = 20)
+    public function search(?string $query, ?User $viewer, int $perPage = 20)
     {
         return User::query()
-            ->where('name', 'like', "%{$query}%")
-            ->orWhere('username', 'like', "%{$query}%")
+            ->when($viewer, fn ($q) => $q->where('id', '!=', $viewer->id))
+            ->when($query, function ($q) use ($query) {
+                $q->where(function ($inner) use ($query) {
+                    $inner->where('name', 'like', "%{$query}%")
+                        ->orWhere('username', 'like', "%{$query}%");
+                });
+            })
             ->withCount(['posts', 'followers', 'following'])
+            ->orderBy('name')
+            ->paginate($perPage);
+    }
+
+    /**
+     * Sugere usuários que o usuário autenticado ainda não segue, para a
+     * seção "sugestões para seguir" da Home.
+     */
+    public function suggestions(User $viewer, int $limit = 5)
+    {
+        $followingIds = $viewer->following()->pluck('following_id');
+
+        return User::query()
+            ->where('id', '!=', $viewer->id)
+            ->whereNotIn('id', $followingIds)
+            ->withCount(['posts', 'followers', 'following'])
+            ->inRandomOrder()
             ->limit($limit)
             ->get();
     }

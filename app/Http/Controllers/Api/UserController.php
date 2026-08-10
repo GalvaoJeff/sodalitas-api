@@ -38,9 +38,23 @@ class UserController extends Controller
 
     public function search(Request $request): JsonResponse
     {
-        $request->validate(['q' => ['required', 'string', 'min:1']]);
+        $request->validate(['q' => ['sometimes', 'nullable', 'string', 'max:100']]);
 
-        $users = $this->userService->search($request->string('q'));
+        $users = $this->userService->search($request->string('q')->value() ?: null, $request->user());
+
+        return response()->json([
+            'users' => UserResource::collection($users),
+            'meta' => [
+                'current_page' => $users->currentPage(),
+                'last_page' => $users->lastPage(),
+                'has_more' => $users->hasMorePages(),
+            ],
+        ]);
+    }
+
+    public function suggestions(Request $request): JsonResponse
+    {
+        $users = $this->userService->suggestions($request->user());
 
         return response()->json(['users' => UserResource::collection($users)]);
     }

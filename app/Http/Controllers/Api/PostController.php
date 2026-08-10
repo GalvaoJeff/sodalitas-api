@@ -64,10 +64,9 @@ class PostController extends Controller
         return response()->json(['post' => new PostResource($post)], 201);
     }
 
-    public function show(Post $post): JsonResponse
+    public function show(Request $request, Post $post): JsonResponse
     {
-        $post->load(['user', 'media', 'comments.user'])
-            ->loadCount(['comments', 'likes']);
+        $post = $this->postService->findForViewer($post, $request->user());
 
         return response()->json(['post' => new PostResource($post)]);
     }

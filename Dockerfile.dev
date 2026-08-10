@@ -1,18 +1,26 @@
-FROM php:8.3-fpm-alpine
+FROM php:8.4-fpm-alpine
 
 WORKDIR /var/www/html
 
 RUN apk add --no-cache \
     git curl zip unzip libpng-dev libzip-dev \
-    oniguruma-dev freetype-dev libjpeg-turbo-dev \
+    oniguruma-dev freetype-dev libjpeg-turbo-dev mysql-client \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install pdo pdo_mysql mbstring zip gd bcmath
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
+# Copiamos o código já na imagem para que o container funcione mesmo sem
+# o volume montado (ex: em CI). Em desenvolvimento local, o compose.yaml
+# sobrescreve isso montando o diretório real, permitindo hot-reload.
 COPY . .
 
 RUN composer install --no-interaction --prefer-dist
 
-EXPOSE 9000
-CMD ["php-fpm"]
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+EXPOSE 8000
+
+ENTRYPOINT ["entrypoint.sh"]
+CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
