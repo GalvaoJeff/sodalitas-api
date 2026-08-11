@@ -1,58 +1,115 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Sodalitas API
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Backend REST da **Sodalitas**, uma rede social acadêmica inspirada em Instagram, LinkedIn, Facebook e Orkut. *Sodalitas* significa "fraternidade" em latim — a proposta é um espaço para reencontrar sua turma, publicar momentos e manter viva essa fraternidade.
 
-## About Laravel
+Este repositório contém apenas a **API**. O frontend (Vue 3 SPA) vive em um repositório separado: [`sodalitas-frontend`](https://github.com/GalvaoJeff/sodalitas-frontend).
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Stack
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+- **Laravel 13** / **PHP 8.4**
+- **Padrão MSC** (Model–Service–Controller) — a regra de negócio fica isolada em classes `Service`, mantendo os Controllers finos (só orquestram request → service → response)
+- **Laravel Sanctum** — autenticação por token (não usa sessão/cookie, é API pura consumida por uma SPA desacoplada)
+- **MySQL 8**
+- **Docker** — `Dockerfile` (produção) + `Dockerfile.dev` (desenvolvimento, com hot-reload via volume) + `compose.yaml` único subindo API + banco
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Arquitetura
 
-## Learning Laravel
-
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
-
-```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+```
+app/
+├── Http/
+│   ├── Controllers/Api/   # Controllers finos: recebem a request, chamam o Service, devolvem JSON
+│   ├── Requests/          # Form Requests com validação e mensagens em português
+│   └── Resources/         # Transformação dos Models em JSON de resposta
+├── Models/                 # Eloquent Models e relacionamentos
+└── Services/                # Toda a regra de negócio da aplicação
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Cada domínio (Posts, Stories, Highlights, Users, etc.) segue o mesmo fluxo:
+`Controller` recebe a requisição validada pelo `FormRequest` → delega para o `Service` correspondente → o `Service` executa a lógica e retorna Models → o `Controller` serializa a resposta com um `Resource`.
 
-## Contributing
+## Funcionalidades
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+- Registro e login com token (Sanctum), senha forte obrigatória (mín. 8 caracteres, letra, número e caractere especial)
+- Perfil de usuário completo (bio, avatar, localização, profissão, formação, telefone condicional a follow mútuo, hobbies)
+- Busca e sugestões de usuários
+- Sistema de follow (seguir/deixar de seguir)
+- Feed com posts de quem o usuário segue + os próprios
+- Posts com múltiplas imagens/vídeos, curtidas e comentários
+- **Stories** com expiração automática de 24h
+- **Destaques** (highlights) permanentes no perfil — a mídia é copiada fisicamente para um diretório próprio, ficando independente do ciclo de vida da story original mesmo após ela expirar
+- Mensagens de validação 100% em português
 
-## Code of Conduct
+## Como rodar
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+Pré-requisitos: Docker e Docker Compose instalados.
 
-## Security Vulnerabilities
+```bash
+# 1. Clonar o repositório
+git clone https://github.com/GalvaoJeff/sodalitas-api.git
+cd sodalitas-api
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+# 2. Copiar o .env de exemplo
+cp .env.example .env
 
-## License
+# 3. Subir os containers (API + MySQL)
+docker compose up -d --build
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+# As migrations rodam automaticamente na subida do container
+# (ver docker/entrypoint.sh). Para popular o banco com dados de teste:
+docker compose exec api php artisan db:seed
+```
+
+A API fica disponível em `http://localhost:8000/api`.
+
+### Usuário de teste
+
+Após rodar o seeder, um usuário fixo fica disponível para testes:
+
+```
+E-mail: teste@teste.com
+Senha:  password
+```
+
+### Comandos úteis
+
+Todo comando `artisan` deve rodar **dentro do container**, nunca direto na máquina host (o hostname `db` do MySQL só resolve na rede interna do Docker):
+
+```bash
+docker compose exec api php artisan migrate:status
+docker compose exec api php artisan migrate:fresh --seed   # reseta o banco do zero
+docker compose exec api php artisan storage:link           # se as imagens não carregarem
+docker compose logs api -f                                  # acompanhar logs em tempo real
+```
+
+## Documentação da API (Swagger)
+
+Com os containers no ar, a documentação interativa de todos os endpoints fica em:
+
+```
+http://localhost:8000/docs
+```
+
+A especificação OpenAPI completa está em `public/openapi.yaml`.
+
+## Variáveis de ambiente
+
+Principais chaves do `.env` (ver `.env.example` para a lista completa):
+
+| Variável | Descrição |
+|---|---|
+| `APP_URL` | URL pública da API (usada para montar URLs absolutas de mídia com `asset()`) |
+| `DB_HOST` | Nome do serviço do MySQL no `compose.yaml` (ex: `db`) — **nunca** `127.0.0.1` dentro do Docker |
+| `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` | Credenciais do MySQL |
+
+## Decisões técnicas relevantes
+
+- **PHP 8.4 obrigatório** — Laravel 13/Pest 5/Symfony 8 exigem PHP ≥8.4.
+- **URLs de mídia sempre absolutas** (`asset('storage/'.$path)`), nunca relativas — evita quebra por origem cruzada entre frontend e backend.
+- **Upload de perfil via method-spoofing** — `PUT` com multipart não funciona nativamente no PHP; o endpoint `/profile` espera `POST` com campo `_method=PUT`.
+- **Sem `config:cache` no build da imagem Docker** — as credenciais do banco só existem em runtime; cachear no build "congela" valores incorretos.
+- **Limites de upload customizados** — `docker/uploads.ini` eleva `upload_max_filesize`/`post_max_size` acima do padrão do PHP, necessário para posts com múltiplas imagens.
+- **API pura, sem Inertia.js** — o projeto é intencionalmente uma API desacoplada de uma SPA Vue, não uma aplicação Laravel monolítica.
+
+## Autor
+
+Jeferson Galvão — [@GalvaoJeff](https://github.com/GalvaoJeff)

@@ -10,6 +10,10 @@ RUN apk add --no-cache \
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
+# Limites de upload maiores que o padrão do PHP (necessário para posts
+# com múltiplas imagens/vídeos). Ver docker/uploads.ini.
+COPY docker/uploads.ini /usr/local/etc/php/conf.d/uploads.ini
+
 # Copiamos o código já na imagem para que o container funcione mesmo sem
 # o volume montado (ex: em CI). Em desenvolvimento local, o compose.yaml
 # sobrescreve isso montando o diretório real, permitindo hot-reload.

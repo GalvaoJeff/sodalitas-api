@@ -1,0 +1,742 @@
+openapi: 3.0.3
+info:
+  title: Sodalitas API
+  description: >
+    API REST da rede social Sodalitas. Arquitetura MSC (Model-Service-Controller)
+    em Laravel 13, autenticação por token via Laravel Sanctum.
+  version: 1.0.0
+  contact:
+    name: Jeferson (GalvaoJeff)
+servers:
+  - url: http://localhost:8000/api
+    description: Ambiente local (Docker)
+
+tags:
+  - name: Auth
+    description: Registro, login e sessão do usuário
+  - name: Users
+    description: Perfis, busca, sugestões e follow
+  - name: Posts
+    description: Feed e publicações
+  - name: Likes
+    description: Curtidas em posts
+  - name: Comments
+    description: Comentários em posts
+  - name: Stories
+    description: Stories com expiração de 24h
+  - name: Highlights
+    description: Destaques permanentes no perfil
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ============ AUTH ============
+  /register:
+    post:
+      tags: [Auth]
+      summary: Criar uma nova conta
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, username, email, password, password_confirmation]
+              properties:
+                name: { type: string, example: "Jeferson Galvão" }
+                username: { type: string, example: "jeferson.dev" }
+                email: { type: string, format: email, example: "jeferson@exemplo.com" }
+                password: { type: string, format: password, example: "Senha@123" }
+                password_confirmation: { type: string, format: password, example: "Senha@123" }
+      responses:
+        '201':
+          description: Conta criada com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { $ref: '#/components/schemas/User' }
+                  token: { type: string, example: "1|aBcDeFgHiJkLmNoPqRsTuVwXyZ" }
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /login:
+    post:
+      tags: [Auth]
+      summary: Autenticar e obter token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email, example: "teste@teste.com" }
+                password: { type: string, format: password, example: "password" }
+      responses:
+        '200':
+          description: Login realizado com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { $ref: '#/components/schemas/User' }
+                  token: { type: string }
+        '422':
+          description: Credenciais inválidas
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /logout:
+    post:
+      tags: [Auth]
+      summary: Invalidar o token atual
+      responses:
+        '200':
+          description: Logout realizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageResponse' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /me:
+    get:
+      tags: [Auth]
+      summary: Dados do usuário autenticado
+      responses:
+        '200':
+          description: Usuário autenticado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { $ref: '#/components/schemas/User' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ============ USERS ============
+  /users/search:
+    get:
+      tags: [Users]
+      summary: Buscar usuários por nome ou username
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string }
+          example: "jef"
+      responses:
+        '200':
+          description: Lista de usuários encontrados
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items: { $ref: '#/components/schemas/User' }
+
+  /users/suggestions:
+    get:
+      tags: [Users]
+      summary: Sugestões de usuários para seguir
+      responses:
+        '200':
+          description: Lista de sugestões
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items: { $ref: '#/components/schemas/User' }
+
+  /users/{username}:
+    get:
+      tags: [Users]
+      summary: Ver perfil de um usuário
+      parameters:
+        - $ref: '#/components/parameters/UsernamePath'
+      responses:
+        '200':
+          description: Perfil do usuário
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { $ref: '#/components/schemas/User' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /users/{username}/posts:
+    get:
+      tags: [Posts]
+      summary: Posts de um usuário específico (grade do perfil)
+      parameters:
+        - $ref: '#/components/parameters/UsernamePath'
+        - $ref: '#/components/parameters/PageQuery'
+      responses:
+        '200':
+          description: Posts do usuário
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaginatedPosts' }
+
+  /users/{username}/follow:
+    post:
+      tags: [Users]
+      summary: Seguir/deixar de seguir um usuário (toggle)
+      parameters:
+        - $ref: '#/components/parameters/UsernamePath'
+      responses:
+        '200':
+          description: Estado do follow alterado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  following: { type: boolean }
+                  message: { type: string }
+
+  /profile:
+    put:
+      tags: [Users]
+      summary: Atualizar o próprio perfil (multipart, com method-spoofing PUT)
+      description: >
+        Envie como POST com o campo `_method=PUT` (multipart/form-data),
+        necessário para permitir upload de avatar junto com os demais campos.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                _method: { type: string, example: "PUT" }
+                name: { type: string }
+                bio: { type: string }
+                avatar: { type: string, format: binary }
+                birthdate: { type: string, format: date }
+                location: { type: string }
+                profession: { type: string }
+                education: { type: string }
+                phone: { type: string }
+                show_phone: { type: boolean }
+                hobbies: { type: string }
+      responses:
+        '200':
+          description: Perfil atualizado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { $ref: '#/components/schemas/User' }
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  # ============ POSTS ============
+  /posts:
+    get:
+      tags: [Posts]
+      summary: Feed principal (próprio usuário + quem segue)
+      parameters:
+        - $ref: '#/components/parameters/PageQuery'
+      responses:
+        '200':
+          description: Página do feed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaginatedPosts' }
+    post:
+      tags: [Posts]
+      summary: Criar um novo post (com mídia, multipart)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                caption: { type: string }
+                media:
+                  type: array
+                  items: { type: string, format: binary }
+      responses:
+        '201':
+          description: Post criado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  post: { $ref: '#/components/schemas/Post' }
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /posts/{post}:
+    get:
+      tags: [Posts]
+      summary: Ver um post específico
+      parameters:
+        - $ref: '#/components/parameters/PostIdPath'
+      responses:
+        '200':
+          description: Detalhe do post
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  post: { $ref: '#/components/schemas/Post' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Posts]
+      summary: Excluir um post (somente o dono)
+      parameters:
+        - $ref: '#/components/parameters/PostIdPath'
+      responses:
+        '200':
+          description: Post excluído
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageResponse' }
+        '422':
+          description: Sem permissão para excluir
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  # ============ LIKES ============
+  /posts/{post}/like:
+    post:
+      tags: [Likes]
+      summary: Curtir/descurtir um post (toggle)
+      parameters:
+        - $ref: '#/components/parameters/PostIdPath'
+      responses:
+        '200':
+          description: Estado da curtida alterado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  liked: { type: boolean }
+                  likes_count: { type: integer }
+
+  # ============ COMMENTS ============
+  /posts/{post}/comments:
+    post:
+      tags: [Comments]
+      summary: Comentar em um post
+      parameters:
+        - $ref: '#/components/parameters/PostIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string, example: "Muito bom!" }
+      responses:
+        '201':
+          description: Comentário criado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  comment: { $ref: '#/components/schemas/Comment' }
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /comments/{comment}:
+    delete:
+      tags: [Comments]
+      summary: Excluir um comentário (somente o dono)
+      parameters:
+        - name: comment
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Comentário excluído
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageResponse' }
+
+  # ============ STORIES ============
+  /stories:
+    get:
+      tags: [Stories]
+      summary: Carrossel do feed (grupos de stories ativas)
+      responses:
+        '200':
+          description: Grupos de stories por usuário
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  story_groups:
+                    type: array
+                    items: { $ref: '#/components/schemas/StoryGroup' }
+    post:
+      tags: [Stories]
+      summary: Publicar uma nova story (expira em 24h)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [media]
+              properties:
+                media: { type: string, format: binary }
+      responses:
+        '201':
+          description: Story criada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  story: { $ref: '#/components/schemas/Story' }
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /users/{username}/stories:
+    get:
+      tags: [Stories]
+      summary: Stories ativas de um usuário específico
+      parameters:
+        - $ref: '#/components/parameters/UsernamePath'
+      responses:
+        '200':
+          description: Lista de stories ativas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stories:
+                    type: array
+                    items: { $ref: '#/components/schemas/Story' }
+
+  /stories/{story}:
+    delete:
+      tags: [Stories]
+      summary: Excluir uma story (somente o dono)
+      parameters:
+        - name: story
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Story excluída
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageResponse' }
+        '422':
+          description: Sem permissão para excluir
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  # ============ HIGHLIGHTS ============
+  /users/{username}/highlights:
+    get:
+      tags: [Highlights]
+      summary: Destaques de um usuário (para a tela de perfil)
+      parameters:
+        - $ref: '#/components/parameters/UsernamePath'
+      responses:
+        '200':
+          description: Lista de destaques
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  highlights:
+                    type: array
+                    items: { $ref: '#/components/schemas/Highlight' }
+
+  /highlights:
+    post:
+      tags: [Highlights]
+      summary: Criar um destaque vazio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string, example: "Viagens" }
+      responses:
+        '201':
+          description: Destaque criado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  highlight: { $ref: '#/components/schemas/Highlight' }
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /highlights/{highlight}/stories:
+    post:
+      tags: [Highlights]
+      summary: Adicionar uma story (própria) a um destaque
+      description: >
+        O arquivo de mídia da story é copiado para um caminho próprio do
+        destaque, tornando-o independente da expiração/exclusão da story original.
+      parameters:
+        - name: highlight
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [story_id]
+              properties:
+                story_id: { type: integer, example: 12 }
+      responses:
+        '201':
+          description: Story adicionada ao destaque
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  highlight: { $ref: '#/components/schemas/Highlight' }
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /highlights/{highlight}/stories/{highlightStory}:
+    delete:
+      tags: [Highlights]
+      summary: Remover um item específico de um destaque
+      parameters:
+        - name: highlight
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: highlightStory
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Item removido
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageResponse' }
+
+  /highlights/{highlight}:
+    delete:
+      tags: [Highlights]
+      summary: Excluir um destaque inteiro (somente o dono)
+      parameters:
+        - name: highlight
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Destaque excluído
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageResponse' }
+        '422':
+          description: Sem permissão para excluir
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: "Sanctum personal access token"
+      description: >
+        Token obtido em /login ou /register. Envie no header:
+        Authorization: Bearer {token}
+
+  parameters:
+    UsernamePath:
+      name: username
+      in: path
+      required: true
+      schema: { type: string }
+      example: "teste"
+    PostIdPath:
+      name: post
+      in: path
+      required: true
+      schema: { type: integer }
+      example: 1
+    PageQuery:
+      name: page
+      in: query
+      schema: { type: integer, default: 1 }
+
+  responses:
+    ValidationError:
+      description: Erro de validação
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message: { type: string, example: "The given data was invalid." }
+              errors:
+                type: object
+                additionalProperties:
+                  type: array
+                  items: { type: string }
+    Unauthorized:
+      description: Token ausente, inválido ou expirado
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    NotFound:
+      description: Recurso não encontrado
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  schemas:
+    MessageResponse:
+      type: object
+      properties:
+        message: { type: string }
+
+    ErrorResponse:
+      type: object
+      properties:
+        message: { type: string }
+
+    User:
+      type: object
+      properties:
+        id: { type: integer, example: 1 }
+        name: { type: string, example: "Jeferson Galvão" }
+        username: { type: string, example: "jeferson.dev" }
+        email: { type: string, example: "jeferson@exemplo.com" }
+        bio: { type: string, nullable: true }
+        avatar_url: { type: string, nullable: true }
+        birthdate: { type: string, format: date, nullable: true }
+        location: { type: string, nullable: true }
+        profession: { type: string, nullable: true }
+        education: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        show_phone: { type: boolean }
+        hobbies: { type: string, nullable: true }
+        followers_count: { type: integer }
+        following_count: { type: integer }
+
+    Media:
+      type: object
+      properties:
+        id: { type: integer }
+        type: { type: string, enum: [image, video] }
+        url: { type: string }
+        position: { type: integer }
+
+    Post:
+      type: object
+      properties:
+        id: { type: integer }
+        caption: { type: string, nullable: true }
+        user: { $ref: '#/components/schemas/User' }
+        media:
+          type: array
+          items: { $ref: '#/components/schemas/Media' }
+        comments_count: { type: integer }
+        likes_count: { type: integer }
+        liked_by_me: { type: boolean }
+        created_at: { type: string, format: date-time }
+
+    PaginatedPosts:
+      type: object
+      properties:
+        posts:
+          type: array
+          items: { $ref: '#/components/schemas/Post' }
+        meta:
+          type: object
+          properties:
+            current_page: { type: integer }
+            last_page: { type: integer }
+            has_more: { type: boolean }
+
+    Comment:
+      type: object
+      properties:
+        id: { type: integer }
+        content: { type: string }
+        user: { $ref: '#/components/schemas/User' }
+        created_at: { type: string, format: date-time }
+
+    Story:
+      type: object
+      properties:
+        id: { type: integer }
+        media_url: { type: string }
+        type: { type: string, enum: [image, video] }
+        expires_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        user: { $ref: '#/components/schemas/User' }
+
+    StoryGroup:
+      type: object
+      properties:
+        user: { $ref: '#/components/schemas/User' }
+        stories:
+          type: array
+          items: { $ref: '#/components/schemas/Story' }
+
+    HighlightItem:
+      type: object
+      properties:
+        id: { type: integer }
+        media_url: { type: string }
+        type: { type: string, enum: [image, video] }
+        position: { type: integer }
+
+    Highlight:
+      type: object
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        cover_url: { type: string, nullable: true }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/HighlightItem' }

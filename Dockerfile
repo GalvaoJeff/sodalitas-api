@@ -16,6 +16,10 @@ RUN { \
     echo 'opcache.validate_timestamps=0'; \
     } > /usr/local/etc/php/conf.d/opcache-recommended.ini
 
+# Limites de upload maiores que o padrão do PHP (necessário para posts
+# com múltiplas imagens/vídeos). Ver docker/uploads.ini.
+COPY docker/uploads.ini /usr/local/etc/php/conf.d/uploads.ini
+
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 COPY . .

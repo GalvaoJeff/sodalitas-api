@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Sodalitas API — Documentação</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui.min.css" />
+  <style>
+    body { margin: 0; background: #1f1626; }
+    .topbar { display: none !important; }
+  </style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui-bundle.min.js"></script>
+  <script>
+    window.onload = () => {
+      window.ui = SwaggerUIBundle({
+        // Caminho relativo: o openapi.yaml fica na raiz do public/,
+        // um nível acima desta página (public/docs/index.html).
+        url: '../openapi.yaml',
+        dom_id: '#swagger-ui',
+        presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],
+        layout: 'BaseLayout',
+      });
+    };
+  </script>
+</body>
+</html>

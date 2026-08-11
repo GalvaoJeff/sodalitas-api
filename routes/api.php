@@ -5,6 +5,8 @@ use App\Http\Controllers\Api\CommentController;
 use App\Http\Controllers\Api\LikeController;
 use App\Http\Controllers\Api\PostController;
 use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\HighlightController;
+use App\Http\Controllers\Api\StoryController;
 use Illuminate\Support\Facades\Route;
 
 // Rotas públicas (não exigem token)
@@ -29,6 +31,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/posts', [PostController::class, 'store']);
     Route::get('/posts/{post}', [PostController::class, 'show']);
     Route::delete('/posts/{post}', [PostController::class, 'destroy']);
+    Route::get('/stories', [StoryController::class, 'index']);
+    Route::post('/stories', [StoryController::class, 'store']);
+    Route::get('/users/{username}/stories', [StoryController::class, 'byUsername']);
+    Route::delete('/stories/{story}', [StoryController::class, 'destroy']);
+    Route::get('/users/{username}/highlights', [HighlightController::class, 'byUsername']);
+    Route::post('/highlights', [HighlightController::class, 'store']);
+    Route::post('/highlights/{highlight}/stories', [HighlightController::class, 'addStory']);
+    Route::delete('/highlights/{highlight}/stories/{highlightStory}', [HighlightController::class, 'removeStory']);
+    Route::delete('/highlights/{highlight}', [HighlightController::class, 'destroy']);
 
     // Curtidas
     Route::post('/posts/{post}/like', [LikeController::class, 'toggle']);

@@ -128,4 +128,20 @@ class User extends Authenticatable
             'follower_id'
         );
     }
+
+    /**
+     * Stories publicadas pelo usuário (inclui expiradas — filtre com
+     * active() na query quando precisar só das vigentes).
+     */
+    public function stories(): HasMany
+    {
+        return $this->hasMany(Story::class);
+    }
+    /**
+     * Destaques do perfil do usuário.
+     */
+    public function highlights(): HasMany
+    {
+        return $this->hasMany(Highlight::class);
+    }
 }
